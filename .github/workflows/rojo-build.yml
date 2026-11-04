@@ -1,29 +1,58 @@
-
-name: Rojo Build
+name: Validate and Build SkylineRush
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout sources
         uses: actions/checkout@v6
+
+      - name: Configure Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate project and economy invariants
+        run: python -m unittest discover -s tests -v
+
+      - name: Parse and format Luau sources (CI working copy)
+        uses: JohnnyMorganz/stylua-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v2.6.0
+          args: src/
 
       - name: Setup Rojo
         uses: notthebestdev/setup-rojo@v1
         with:
           version: v7.5.1
 
-      - name: Build Roblox project
+      - name: Build Roblox place
         run: rojo build -o SkylineRush.rbxlx
 
-      - name: Upload Roblox build
+      - name: Check build artifact
+        run: |
+          test -s SkylineRush.rbxlx
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('SkylineRush.rbxlx').getroot()
+          assert root.tag == 'roblox'
+          print('Roblox XML parse OK')
+          PY
+
+      - name: Upload place file
         uses: actions/upload-artifact@v6
         with:
           name: SkylineRush-place
           path: SkylineRush.rbxlx
           if-no-files-found: error
+          retention-days: 30

@@ -1,148 +1,221 @@
+local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Config = require(ReplicatedStorage.Shared.Config)
 
-local WorldService = {}
-WorldService.CrystalsFolder = nil
-WorldService.Plots = {}
+local World = {}
+World.Plots = {}
+World.CrystalFolder = nil
+World.Prompts = {}
+World.ZoneBarriers = {}
+
+local COLORS = {
+    dark = Color3.fromRGB(23, 37, 63),
+    stone = Color3.fromRGB(47, 62, 94),
+    cyan = Color3.fromRGB(45, 226, 240),
+    gold = Color3.fromRGB(255, 198, 83),
+    violet = Color3.fromRGB(163, 107, 246),
+    green = Color3.fromRGB(60, 168, 127),
+}
 
 local function part(parent, name, size, position, color, material, shape)
-    local object = Instance.new("Part")
-    object.Name = name
-    object.Size = size
-    object.Position = position
-    object.Anchored = true
-    object.Color = color
-    object.Material = material or Enum.Material.SmoothPlastic
-    object.TopSurface = Enum.SurfaceType.Smooth
-    object.BottomSurface = Enum.SurfaceType.Smooth
-    if shape then object.Shape = shape end
-    object.Parent = parent
-    return object
+    local p = Instance.new("Part")
+    p.Name = name
+    p.Size = size
+    p.Position = position
+    p.Anchored = true
+    p.Material = material or Enum.Material.SmoothPlastic
+    p.Color = color
+    p.TopSurface = Enum.SurfaceType.Smooth
+    p.BottomSurface = Enum.SurfaceType.Smooth
+    if shape then p.Shape = shape end
+    p.Parent = parent
+    return p
 end
 
-local function prompt(parent, action, object, hold)
+local function sphere(parent, name, pos, size, color, material)
+    return part(parent, name, Vector3.new(size, size, size), pos, color, material or Enum.Material.Neon, Enum.PartType.Ball)
+end
+
+local function billboard(parent, words, tint, y)
+    local gui = Instance.new("BillboardGui")
+    gui.Name = "Label"
+    gui.Size = UDim2.fromOffset(245, 65)
+    gui.StudsOffsetWorldSpace = Vector3.new(0, y or 5, 0)
+    gui.AlwaysOnTop = true
+    gui.MaxDistance = 90
+    gui.Parent = parent
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundColor3 = COLORS.dark
+    label.BackgroundTransparency = 0.18
+    label.BorderSizePixel = 0
+    label.Text = words
+    label.TextColor3 = tint
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = gui
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 14)
+    corner.Parent = label
+    return label
+end
+
+local function actionPrompt(parent, action, object)
     local p = Instance.new("ProximityPrompt")
     p.ActionText = action
     p.ObjectText = object
-    p.HoldDuration = hold or 0
+    p.HoldDuration = 0.25
     p.MaxActivationDistance = 12
     p.RequiresLineOfSight = false
     p.Parent = parent
     return p
 end
 
-function WorldService:Create()
-    local old = Workspace:FindFirstChild("SkylineWorld")
-    if old then old:Destroy() end
-    local world = Instance.new("Folder")
-    world.Name = "SkylineWorld"
-    world.Parent = Workspace
+local function decorateTree(folder, x, z, scale)
+    local trunk = part(folder, "TreeTrunk", Vector3.new(2, 8, 2) * scale, Vector3.new(x, 11, z), Color3.fromRGB(96, 70, 72), Enum.Material.Wood)
+    local crown = sphere(folder, "TreeCrown", Vector3.new(x, 18, z), 11 * scale, Color3.fromRGB(35, 153, 139), Enum.Material.Grass)
+    trunk.CanCollide = false
+    crown.CanCollide = false
+end
 
-    part(world, "FloatingIsland", Config.Map.IslandSize, Vector3.new(0, 0, 0), Color3.fromRGB(57, 112, 91), Enum.Material.Grass)
-    part(world, "IslandUnderside", Vector3.new(170, 22, 170), Vector3.new(0, -15, 0), Color3.fromRGB(54, 65, 93), Enum.Material.Slate)
+function World:Create()
+    local previous = Workspace:FindFirstChild("SkylineWorld")
+    if previous then previous:Destroy() end
+    local folder = Instance.new("Folder")
+    folder.Name = "SkylineWorld"
+    folder.Parent = Workspace
+    self.Prompts = {}
+    self.Plots = {}
+    self.ZoneBarriers = {}
 
+    Lighting.ClockTime = 14
+    Lighting.Brightness = 3
+    Lighting.Ambient = Color3.fromRGB(80, 126, 165)
+    Lighting.OutdoorAmbient = Color3.fromRGB(90, 140, 180)
+    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
+    atmosphere.Density = 0.22
+    atmosphere.Haze = 1.2
+    atmosphere.Color = Color3.fromRGB(175, 217, 255)
+    atmosphere.Parent = Lighting
+
+    -- Main island and two elevated zone gardens, with bridges and unique materials.
+    part(folder, "FloatingMainIsland", Config.World.MainSize, Vector3.new(0, -1, 0), COLORS.stone, Enum.Material.Slate)
+    part(folder, "GrassTop", Vector3.new(248, 2, 238), Vector3.new(0, 6, 0), COLORS.green, Enum.Material.Grass)
+    for zone = 2, 3 do
+        local center = Config.World.ZoneCenters[zone]
+        local color = zone == 2 and COLORS.cyan or COLORS.violet
+        part(folder, "ZoneIsland" .. zone, Vector3.new(65, 7, 57), Vector3.new(center.X, 10, center.Z), COLORS.stone, Enum.Material.Slate)
+        part(folder, "ZoneSurface" .. zone, Vector3.new(63, 2, 55), Vector3.new(center.X, 14, center.Z), color, Enum.Material.SmoothPlastic)
+    end
     local spawn = Instance.new("SpawnLocation")
     spawn.Name = "PlayerSpawn"
-    spawn.Size = Vector3.new(12, 1, 12)
-    spawn.Position = Vector3.new(0, 6, 0)
     spawn.Anchored = true
     spawn.Neutral = true
-    spawn.Color = Color3.fromRGB(75, 190, 255)
+    spawn.Size = Vector3.new(13, 1, 13)
+    spawn.Position = Config.World.Spawn
     spawn.Material = Enum.Material.Neon
-    spawn.Parent = world
+    spawn.Color = COLORS.cyan
+    spawn.Parent = folder
+    billboard(spawn, "SKYLINE RUSH\nCOLLECT • BUILD • EXPLORE", Color3.new(1, 1, 1), 9)
 
-    for i = 1, 8 do
-        local angle = (math.pi * 2 / 8) * i
-        local x, z = math.cos(angle) * 88, math.sin(angle) * 88
-        part(world, "CrystalPylon", Vector3.new(3, 13, 3), Vector3.new(x, 9, z), Color3.fromRGB(58, 190, 220), Enum.Material.Neon)
-        local cap = part(world, "PylonCap", Vector3.new(5, 2, 5), Vector3.new(x, 16, z), Color3.fromRGB(120, 235, 255), Enum.Material.Neon, Enum.PartType.Ball)
-        cap.Transparency = 0.15
+    local plaza = part(folder, "Plaza", Vector3.new(86, 1, 38), Vector3.new(0, 8, 51), COLORS.dark, Enum.Material.Metal)
+    local labels = {
+        {"Sell", -29, COLORS.gold, "SELL CRYSTALS"},
+        {"Speed", -10, COLORS.cyan, "UPGRADE SPEED"},
+        {"Capacity", 10, COLORS.violet, "BAG CAPACITY"},
+        {"Zone", 29, COLORS.green, "UNLOCK ZONE"},
+    }
+    for _, v in ipairs(labels) do
+        local pad = part(folder, v[1] .. "Pad", Vector3.new(16, 2, 14), Vector3.new(v[2], 9, 51), v[3], Enum.Material.Neon)
+        self.Prompts[v[1]] = actionPrompt(pad, v[4], v[1] .. " terminal")
+        billboard(pad, v[4], Color3.new(1, 1, 1), 6)
     end
 
-    local sell = part(world, "SellStation", Vector3.new(18, 2, 18), Vector3.new(-20, 7, 38), Color3.fromRGB(255, 184, 65), Enum.Material.Neon)
-    prompt(sell, "Sell crystals", "Energy Exchange", 0.25)
-    local upgrade = part(world, "UpgradePad", Vector3.new(18, 2, 18), Vector3.new(20, 7, 38), Color3.fromRGB(100, 145, 255), Enum.Material.Neon)
-    prompt(upgrade, "Upgrade speed", "Upgrade Terminal", 0.25)
+    for n = 1, 11 do
+        local x = -105 + (n % 6) * 42
+        local z = -1 + math.floor(n / 6) * 24
+        decorateTree(folder, x, z, (n % 3 == 0) and 0.8 or 1)
+    end
 
-    local plotsFolder = Instance.new("Folder")
-    plotsFolder.Name = "TycoonPlots"
-    plotsFolder.Parent = world
-    self.Plots = {}
-
-    local offsets = {
-        Vector3.new(-65, 6, -65),
-        Vector3.new(65, 6, -65),
-        Vector3.new(-65, 6, 65),
-        Vector3.new(65, 6, 65),
-    }
-
-    for index = 1, Config.Tycoon.PlotCount do
-        local model = Instance.new("Model")
-        model.Name = "Plot" .. index
-        model.Parent = plotsFolder
-        local origin = offsets[index]
-        local base = part(model, "PlotBase", Vector3.new(48, 2, 38), origin, Color3.fromRGB(37, 54, 78), Enum.Material.Metal)
-        local sign = part(model, "PlotSign", Vector3.new(12, 5, 1), origin + Vector3.new(0, 5, -17), Color3.fromRGB(32, 120, 170), Enum.Material.Neon)
-        local surface = part(model, "GeneratorPad", Vector3.new(12, 1, 12), origin + Vector3.new(0, 2, 0), Color3.fromRGB(55, 180, 210), Enum.Material.Neon)
-        local buyPrompt = prompt(surface, "Buy generator", "Tycoon generator", 0.5)
-        local label = Instance.new("BillboardGui")
-        label.Name = "OwnerLabel"
-        label.Size = UDim2.fromOffset(180, 42)
-        label.StudsOffset = Vector3.new(0, 4, 0)
-        label.AlwaysOnTop = true
-        label.Parent = sign
-        local text = Instance.new("TextLabel")
-        text.Size = UDim2.fromScale(1, 1)
-        text.BackgroundTransparency = 1
-        text.Text = "UNCLAIMED PLOT"
-        text.TextColor3 = Color3.new(1, 1, 1)
-        text.TextScaled = true
-        text.Font = Enum.Font.GothamBold
-        text.Parent = label
-        self.Plots[index] = {
-            Model = model,
-            Base = base,
-            Prompt = buyPrompt,
-            OwnerLabel = text,
-            Origin = origin,
-            Generator = nil,
-            OwnerUserId = nil,
+    for i = 1, 4 do
+        local positions = {
+            Vector3.new(-82, 8, 25), Vector3.new(82, 8, 25),
+            Vector3.new(-82, 8, 91), Vector3.new(82, 8, 91),
         }
+        local origin = positions[i]
+        local model = Instance.new("Model")
+        model.Name = "TycoonPlot" .. i
+        model.Parent = folder
+        part(model, "Foundation", Vector3.new(46, 2, 40), origin, COLORS.dark, Enum.Material.Metal)
+        local terminal = part(model, "GeneratorPurchase", Vector3.new(10, 2, 10), origin + Vector3.new(-11, 2, 7), COLORS.gold, Enum.Material.Neon)
+        local generatorSpot = part(model, "GeneratorPlatform", Vector3.new(13, 1, 13), origin + Vector3.new(9, 2, -4), COLORS.cyan, Enum.Material.Metal)
+        local nameLabel = billboard(terminal, "AVAILABLE TYCOON", Color3.new(1, 1, 1), 8)
+        local purchase = actionPrompt(terminal, "BUY GENERATOR", "Private Tycoon")
+        self.Plots[i] = {Model = model, Origin = origin, Prompt = purchase, Label = nameLabel, OwnerId = nil, Generator = nil, Platform = generatorSpot}
     end
 
     local crystals = Instance.new("Folder")
     crystals.Name = "Crystals"
-    crystals.Parent = world
-    self.CrystalsFolder = crystals
-    return world
+    crystals.Parent = folder
+    self.CrystalFolder = crystals
+    return folder
 end
 
-function WorldService:SpawnCrystal(onCollected)
-    if not self.CrystalsFolder then return end
-    local radius = Config.Map.CrystalAreaRadius
-    local angle = math.random() * math.pi * 2
-    local distance = math.sqrt(math.random()) * radius
-    local x, z = math.cos(angle) * distance, math.sin(angle) * distance
-    local crystal = part(self.CrystalsFolder, "EnergyCrystal", Vector3.new(2.5, 3.5, 2.5), Vector3.new(x, Config.Map.CrystalSpawnHeight, z), Color3.fromRGB(65, 225, 255), Enum.Material.Neon, Enum.PartType.Ball)
+function World:RenderGenerator(plot, level)
+    if plot.Generator then plot.Generator:Destroy() end
+    plot.Generator = nil
+    if level <= 0 then return end
+    local model = Instance.new("Model")
+    model.Name = "EnergyGenerator_Level" .. level
+    model.Parent = plot.Model
+    local center = plot.Origin + Vector3.new(9, 5, -4)
+    part(model, "GeneratorBody", Vector3.new(9, 6 + level, 9), center + Vector3.new(0, level / 2, 0), COLORS.dark, Enum.Material.Metal)
+    for i = 1, 3 do
+        local ring = part(model, "PowerCoil", Vector3.new(10, 0.7, 10), center + Vector3.new(0, i * 2, 0), COLORS.cyan, Enum.Material.Neon)
+        ring.CanCollide = false
+    end
+    local core = sphere(model, "PowerCore", center + Vector3.new(0, 9 + level / 2, 0), 5, COLORS.cyan)
+    core.CanCollide = false
+    local light = Instance.new("PointLight")
+    light.Range = 24
+    light.Brightness = 3
+    light.Color = COLORS.cyan
+    light.Parent = core
+    billboard(core, "GENERATOR LV. " .. level, COLORS.gold, 5)
+    plot.Generator = model
+end
+
+function World:SpawnCrystal(zoneIndex, onTriggered)
+    local zoneCenter = Config.World.ZoneCenters[zoneIndex]
+    local halfWidth = zoneIndex == 1 and 62 or 23
+    local x = zoneCenter.X + math.random(-halfWidth, halfWidth)
+    local z = zoneCenter.Z + math.random(-20, 20)
+    local altitude = zoneIndex == 1 and 9.2 or 17.2
+    local tint = ({COLORS.cyan, COLORS.gold, COLORS.violet})[zoneIndex]
+    local crystal = sphere(self.CrystalFolder, "Crystal_Z" .. zoneIndex, Vector3.new(x, altitude, z), 3.4, tint)
     crystal.CanCollide = false
     local light = Instance.new("PointLight")
-    light.Color = crystal.Color
-    light.Range = 10
-    light.Brightness = 1.5
+    light.Color = tint
+    light.Brightness = 1.6
+    light.Range = 11
     light.Parent = crystal
-    local p = prompt(crystal, "Collect", "Energy Crystal", 0)
-    local collected = false
-    p.Triggered:Connect(function(player)
-        if collected then return end
-        collected = true
-        p.Enabled = false
-        crystal:Destroy()
-        onCollected(player)
-        task.delay(Config.CrystalRespawnSeconds, function()
-            self:SpawnCrystal(onCollected)
-        end)
+    local prompt = actionPrompt(crystal, "COLLECT +" .. Config.CrystalValuePerZone[zoneIndex], Config.ZoneNames[zoneIndex])
+    prompt.HoldDuration = 0
+    local busy = false
+    prompt.Triggered:Connect(function(player)
+        if busy then return end
+        local accepted = onTriggered(player, zoneIndex, crystal)
+        if accepted then
+            busy = true
+            crystal:Destroy()
+            task.delay(Config.CrystalRespawnSeconds, function()
+                if self.CrystalFolder and self.CrystalFolder.Parent then
+                    self:SpawnCrystal(zoneIndex, onTriggered)
+                end
+            end)
+        end
     end)
 end
 
-return WorldService
+return World
