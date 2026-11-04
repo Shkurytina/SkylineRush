@@ -10,14 +10,36 @@ local loaded = {}
 
 local function defaults()
     local data = {}
-    for key, value in pairs(Config.StartingData) do data[key] = value end
+    for key, value in pairs(Config.StartingData) do
+        data[key] = value
+    end
     return data
 end
 
-local function snapshot(source)
-    local result = {}
-    for key, value in pairs(source) do result[key] = value end
-    return result
+local function validInteger(value, minimum, maximum, fallback)
+    if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge then
+        return fallback
+    end
+    return math.clamp(math.floor(value), minimum, maximum)
+end
+
+local function sanitize(saved)
+    local data = defaults()
+    if type(saved) == "table" then
+        for key, defaultValue in pairs(Config.StartingData) do
+            if type(saved[key]) == type(defaultValue) then
+                data[key] = saved[key]
+            end
+        end
+    end
+
+    -- Validate capacity before using it to clamp the crystal count.
+    data.Capacity = validInteger(data.Capacity, 1, 500, Config.StartingData.Capacity)
+    data.Coins = validInteger(data.Coins, 0, 2000000000, 0)
+    data.Crystals = validInteger(data.Crystals, 0, data.Capacity, 0)
+    data.SpeedLevel = validInteger(data.SpeedLevel, 0, Config.MaxSpeedLevel, 0)
+    data.GeneratorLevel = validInteger(data.GeneratorLevel, 0, Config.Tycoon.MaxGeneratorLevel, 0)
+    return data
 end
 
 function PlayerDataService:Get(player)
@@ -41,16 +63,7 @@ function PlayerDataService:Load(player)
         return nil
     end
 
-    local data = defaults()
-    if type(saved) == "table" then
-        for key, defaultValue in pairs(Config.StartingData) do
-            if type(saved[key]) == type(defaultValue) then data[key] = saved[key] end
-        end
-    end
-    data.Coins = math.max(0, math.floor(data.Coins))
-    data.Crystals = math.clamp(math.floor(data.Crystals), 0, data.Capacity)
-    data.Capacity = math.clamp(math.floor(data.Capacity), 1, 500)
-    data.SpeedLevel = math.clamp(math.floor(data.SpeedLevel), 0, Config.MaxSpeedLevel)
+    local data = sanitize(saved)
     cache[player] = data
     loaded[player] = true
     return data
@@ -59,13 +72,16 @@ end
 function PlayerDataService:Save(player)
     local data = self:Get(player)
     if not data then return false end
-    local savedSnapshot = snapshot(data)
+
+    local snapshot = table.clone(data)
     local success, err = pcall(function()
         store:UpdateAsync("player_" .. player.UserId, function()
-            return savedSnapshot
+            return snapshot
         end)
     end)
-    if not success then warn("[Data] Save failed for " .. player.Name .. ": " .. tostring(err)) end
+    if not success then
+        warn("[Data] Save failed for " .. player.Name .. ": " .. tostring(err))
+    end
     return success
 end
 
@@ -76,11 +92,40 @@ function PlayerDataService:Remove(player)
 end
 
 function PlayerDataService:Start()
-    Players.PlayerAdded:Connect(function(player) self:Load(player) end)
-    Players.PlayerRemoving:Connect(function(player) self:Remove(player) end)
-    for _, player in ipairs(Players:GetPlayers()) do task.spawn(function() self:Load(player) end) end
+    Players.PlayerAdded:Connect(function(player)
+        self:Load(player)
+    end)
+    Players.PlayerRemoving:Connect(function(player)
+        self:Remove(player)
+    end)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        task.spawn(function() self:Load(player) end)
+    end
+
+    -- Periodic saves reduce progress loss if a server closes unexpectedly.
+    task.spawn(function()
+        while true do
+            task.wait(60)
+            for _, player in ipairs(Players:GetPlayers()) do
+                task.spawn(function() self:Save(player) end)
+            end
+        end
+    end)
+
     game:BindToClose(function()
-        for _, player in ipairs(Players:GetPlayers()) do self:Save(player) end
+        local pending = 0
+        for _, player in ipairs(Players:GetPlayers()) do
+            pending += 1
+            task.spawn(function()
+                self:Save(player)
+                pending -= 1
+            end)
+        end
+        local deadline = os.clock() + 25
+        while pending > 0 and os.clock() < deadline do
+            task.wait(0.1)
+        end
     end)
 end
 

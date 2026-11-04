@@ -1,7 +1,13 @@
 local Config = {}
 
-Config.DataStoreName = "SkylineRush_PlayerData_v1"
-Config.StartingData = { Coins = 0, Crystals = 0, Capacity = 10, SpeedLevel = 0 }
+Config.DataStoreName = "SkylineRush_PlayerData_v2"
+Config.StartingData = {
+    Coins = 0,
+    Crystals = 0,
+    Capacity = 10,
+    SpeedLevel = 0,
+    GeneratorLevel = 0,
+}
 Config.CrystalValue = 5
 Config.CrystalRespawnSeconds = 5
 Config.InitialCrystalCount = 32
@@ -10,6 +16,20 @@ Config.UpgradeCostMultiplier = 1.6
 Config.SpeedPerLevel = 2
 Config.BaseWalkSpeed = 16
 Config.MaxSpeedLevel = 10
-Config.Map = { IslandSize = Vector3.new(190, 10, 190), CrystalAreaRadius = 66, CrystalSpawnHeight = 7 }
+
+Config.Tycoon = {
+    PlotCount = 4,
+    GeneratorBaseCost = 100,
+    GeneratorCostMultiplier = 1.8,
+    IncomePerLevel = 10,
+    IncomeInterval = 5,
+    MaxGeneratorLevel = 10,
+}
+
+Config.Map = {
+    IslandSize = Vector3.new(230, 10, 230),
+    CrystalAreaRadius = 62,
+    CrystalSpawnHeight = 7,
+}
 
 return Config

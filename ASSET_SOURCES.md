@@ -1,13 +1,10 @@
 # Asset sources
 
-## Current MVP
+The v2 prototype uses Roblox-native Parts, materials, lights, prompts and UI created by Luau. No external model files are bundled, so the current repository has no third-party model license dependencies.
 
-The current map is built from native Roblox Parts and materials in `WorldService.lua`. No external mesh files are bundled, so the project has no third-party model attribution or import dependency at this stage.
+Potential future CC0 art sources:
+- Kenney Nature Kit: https://kenney.nl/assets/nature-kit
+- Kenney Building Kit: https://kenney.nl/assets/building-kit
+- License information: https://kenney.nl/support
 
-## Recommended open assets for the art pass
-
-- Kenney Nature Kit: https://kenney.nl/assets/nature-kit — official asset page lists Creative Commons CC0.
-- Kenney Building Kit: https://kenney.nl/assets/building-kit — official asset page lists Creative Commons CC0.
-- Kenney license FAQ: https://kenney.nl/support — confirms CC0 assets can be used commercially and attribution is optional.
-
-Before importing any asset, retain the included license text and verify the license on the official source page.
+Before importing any external assets, retain the source page and license information in the repository and verify the license of the exact downloaded asset.
